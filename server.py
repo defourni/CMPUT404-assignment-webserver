@@ -29,16 +29,21 @@ import mimetypes
 
 
 class MyWebServer(socketserver.BaseRequestHandler):
+    def sendFile(self,f):
+        mimetype = mimetypes.guess_type(self.path.split("/")[-1])
+        self.request.sendall(bytearray("HTTP/1.1 200 OK\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
+        self.request.sendall(f.read().encode('utf-8'))        
     
     def handleGet(self):
         self.path = 'www' + self.reqType[1]
+        #protection from accessing other dirs
         if("/../" in self.path):
             self.path = "bad-path"
         try:
             f = open(self.path,'r')
-            print(self.path)
             
         except IOError as e:
+            
             if(e.args[0] == 2): #no such file
                 self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
             elif(e.args[0] == 21): #is a directory
@@ -50,40 +55,35 @@ class MyWebServer(socketserver.BaseRequestHandler):
                     except IOError:
                         self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
                     else:
-                        mimetype = mimetypes.guess_type(self.path.split("/")[-1])
-                        self.request.sendall(bytearray("HTTP/1.1 200 OK\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
-                        self.request.sendall(f.read().encode('utf-8'))
+                        self.sendFile(f)
                 else:
+                    #url is a dir but does not have trailing /
                     try:
                         self.path = self.path + "/index.html"
                         f = open(self.path)
                     except IOError:
                         self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
                     else:
+                        #if index.html could be found, send a 301 with the location including the trailing /
                         mimetype = mimetypes.guess_type(self.path.split("/")[-1])
-                        self.request.sendall(bytearray("HTTP/1.1 301 Redirect\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
+                        self.request.sendall(bytearray("HTTP/1.1 301 Moved Permanently\r\nLocation: 127.0.0.1:8080/"+self.path[3:-10]+"\r\nContent-Type: "+ mimetype[0] +"\r\n",'utf-8'))
                         self.request.sendall(f.read().encode('utf-8'))                    
             else:
                 #saved for future exceptions
                 self.request.sendall(bytearray("HTTP/1.1 200 OK\r\n\r\n",'utf-8'))
         else:
-            mimetype = mimetypes.guess_type(self.path.split("/")[-1])
-            self.request.sendall(bytearray("HTTP/1.1 200 OK\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
-            self.request.sendall(f.read().encode('utf-8'))            
-            
-            
+            self.sendFile(f)            
         
-    
     def handle(self):
         self.data = self.request.recv(1024).strip()
         self.lines = self.data.decode().split('\n')
         self.reqType = self.lines[0].split(" ")
         if(self.reqType[0] == 'GET'):
+            #GET Request
             self.handleGet()
         else:
+            #Any other Requests (POST,PUT,etc)
             self.request.sendall(bytearray("HTTP/1.1 405 Method Not Allowed\r\n\r\n",'utf-8'))
-        
-        #print (self.reqType)
         
         
 
