@@ -1,5 +1,6 @@
 #  coding: utf-8 
 import socketserver
+import mimetypes
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -29,10 +30,62 @@ import socketserver
 
 class MyWebServer(socketserver.BaseRequestHandler):
     
+    def handleGet(self):
+        self.path = 'www' + self.reqType[1]
+        if("/../" in self.path):
+            self.path = "bad-path"
+        try:
+            f = open(self.path,'r')
+            print(self.path)
+            
+        except IOError as e:
+            if(e.args[0] == 2): #no such file
+                self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
+            elif(e.args[0] == 21): #is a directory
+                #try and open index.html
+                if(self.path[-1] == '/'):
+                    try:
+                        self.path = self.path + "index.html"
+                        f = open(self.path)
+                    except IOError:
+                        self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
+                    else:
+                        mimetype = mimetypes.guess_type(self.path.split("/")[-1])
+                        self.request.sendall(bytearray("HTTP/1.1 200 OK\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
+                        self.request.sendall(f.read().encode('utf-8'))
+                else:
+                    try:
+                        self.path = self.path + "/index.html"
+                        f = open(self.path)
+                    except IOError:
+                        self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n\r\n",'utf-8'))
+                    else:
+                        mimetype = mimetypes.guess_type(self.path.split("/")[-1])
+                        self.request.sendall(bytearray("HTTP/1.1 301 Redirect\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
+                        self.request.sendall(f.read().encode('utf-8'))                    
+            else:
+                #saved for future exceptions
+                self.request.sendall(bytearray("HTTP/1.1 200 OK\r\n\r\n",'utf-8'))
+        else:
+            mimetype = mimetypes.guess_type(self.path.split("/")[-1])
+            self.request.sendall(bytearray("HTTP/1.1 200 OK\r\nContent-Type: "+mimetype[0]+"\r\n",'utf-8'))
+            self.request.sendall(f.read().encode('utf-8'))            
+            
+            
+        
+    
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        self.lines = self.data.decode().split('\n')
+        self.reqType = self.lines[0].split(" ")
+        if(self.reqType[0] == 'GET'):
+            self.handleGet()
+        else:
+            self.request.sendall(bytearray("HTTP/1.1 405 Method Not Allowed\r\n\r\n",'utf-8'))
+        
+        #print (self.reqType)
+        
+        
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
